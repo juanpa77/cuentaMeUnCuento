@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import {
   Platform,
   KeyboardAvoidingView,
@@ -9,17 +9,26 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import TextInputContainer from '../components/TextInputContainer';
+import useSocket from '../hooks/useSocket';
+import useCall, { configuration } from '../hooks/useCall';
+import { RTCPeerConnection } from 'react-native-webrtc';
+import IncomingCall from './IncomingCall';
+import OutgoingCall from './OutgoingCall';
 
 export default function Join({ }) {
-
   const [type, setType] = useState('JOIN');
-
-  const [callerId] = useState(
+  const [callerId, setCallerId] = useState(
     Math.floor(100000 + Math.random() * 900000).toString(),
   );
-
-  const otherUserId = useRef<null | string>(null);
-
+  const peerConnection = useRef(new RTCPeerConnection(configuration))
+  const peerRef = peerConnection
+  const [
+    processCall,
+    processAccept,
+    otherUserId,
+    setOtherUserId
+  ] = useSocket({ callerId, peerRef, setType })
+  const [remoteMediaStream, localMediaStream] = useCall({ peerConnection })
 
   const JoinScreen = () => {
     return (
@@ -82,14 +91,13 @@ export default function Join({ }) {
               </Text>
               <TextInputContainer
                 placeholder={'Enter Caller ID'}
-                value={otherUserId.current!}
-                setValue={text => {
-                  otherUserId.current = text;
-                }}
+                value={otherUserId}
+                setValue={(text) => setOtherUserId(text)}
                 keyboardType={'number-pad'}
               />
               <TouchableOpacity
                 onPress={() => {
+                  processCall()
                   setType('OUTGOING_CALL');
                 }}
                 style={{
@@ -115,21 +123,13 @@ export default function Join({ }) {
     );
   };
 
-  const OutgoingCallScreen = () => {
-    return null
-  };
-
-  const IncomingCallScreen = () => {
-    return null
-  };
-
   switch (type) {
     case 'JOIN':
       return JoinScreen();
     case 'INCOMING_CALL':
-      return IncomingCallScreen();
+      return IncomingCall({ processAccept, idUser: otherUserId, setType });
     case 'OUTGOING_CALL':
-      return OutgoingCallScreen();
+      return OutgoingCall({ idUser: otherUserId, setType });
     default:
       return null;
   }

@@ -1,23 +1,10 @@
-import { MutableRefObject, useEffect, useRef, useState } from "react";
-import { mediaDevices, MediaStream, RTCIceCandidate, RTCSessionDescription } from "react-native-webrtc";
-import RTCDataChannel from "react-native-webrtc/lib/typescript/RTCDataChannel";
-import RTCPeerConnection from "react-native-webrtc/lib/typescript/RTCPeerConnection";
-import { RTCSessionDescriptionInit } from "react-native-webrtc/lib/typescript/RTCSessionDescription";
+import { useEffect, useRef } from "react";
+import { RTCIceCandidate, RTCSessionDescription } from "react-native-webrtc";
 import { io } from "socket.io-client"
-
-const STUNServer = {
-  iceServers: [
-    {
-      urls: 'stun:stun.l.google.com:19302',
-    },
-    {
-      urls: 'stun:stun1.l.google.com:19302',
-    },
-    {
-      urls: 'stun:stun2.l.google.com:19302',
-    },
-  ],
-};
+import { useUserContext } from "./userContext";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { RootStackParamList } from "../types/navigation";
+// import useCall from "./useCall";
 
 const sessionConstraints = {
   mandatory: {
@@ -28,134 +15,113 @@ const sessionConstraints = {
 };
 
 type Props = {
-  callerId: string
-  peerRef: MutableRefObject<RTCPeerConnection>
-  setType: (type: string) => void
+  navigation: NativeStackNavigationProp<RootStackParamList>
+  openModalIncomingCall: () => void
 }
 
-type CallData = {
+export type CallData = {
   callerId: string
   rtcMessage: any
 }
 
-const useSocket = ({ callerId, peerRef, setType }: Props) => {
-  // const otherUser = useRef<undefined | string>()
-  const [otherUserId, setOtherUserId] = useState('')
+const useSocket = ({ navigation, openModalIncomingCall }: Props) => {
+  const { user, setOtherUserId } = useUserContext()
   const remoteRTCMessage = useRef<any>()
-  // const peerRef = useRef<undefined | RTCPeerConnection>()
-  // const socket = io('http://192.168.1.6:3000')
-  const socketRef = useRef(io('http://192.168.1.4:3000', {
+  const socket = useRef(io('http://192.168.1.7:3000', {
     transports: ['websocket'],
     query: {
-      callerId,
+      callerId: user.callerId,
     },
   }))
 
   useEffect(() => {
-    socketRef.current.on('newCall', (data: CallData) => {
-      console.log(callerId)
+    socket.current.on('newCall', (data: CallData) => {
       remoteRTCMessage.current = data.rtcMessage
       setOtherUserId(data.callerId)
-      setType('INCOMING_CALL')
+      openModalIncomingCall()
     })
 
-    socketRef.current.on("callAnswered", (data: CallData) => {
-      // 7. When Alice gets Bob's session description, she sets that as the remote description with `setRemoteDescription` method.
+    socket.current.on("callAnswered", (data: CallData) => {
       remoteRTCMessage.current = data.rtcMessage;
-      peerRef.current.setRemoteDescription(
+      user.peerConnection?.current.setRemoteDescription(
         new RTCSessionDescription(remoteRTCMessage.current)
       );
-      setType("WEBRTC_ROOM");
+      navigation.navigate('WebRTCRoom')
     });
 
-    socketRef.current.on("ICEcandidate", (data: CallData) => {
+    socket.current.on("ICEcandidate", (data: CallData) => {
+      console.log('IncomingCall', data)
       let message = data.rtcMessage;
-      // When Bob gets a candidate message from Alice, he calls `addIceCandidate` to add the candidate to the remote peer description.
-      if (peerRef.current) {
-        peerRef?.current
+      if (user.peerConnection?.current) {
+        user.peerConnection?.current
           .addIceCandidate(new RTCIceCandidate(message.candidate))
           .then((dat: any) => {
-            // console.log("SUCCESS", dat);
+            console.log("SUCCESS", dat);
           })
           .catch((err: any) => {
-            // console.log("Error", err);
+            console.log("Error", err);
           });
       }
-      peerRef.current.onicecandidate = (event: any) => {
-        if (event.candidate) {
-          // Alice sends serialized candidate data to Bob using Socket
-          sendICEcandidate({
-            callerId: otherUserId,
-            rtcMessage: {
-              label: event.candidate.sdpMLineIndex,
-              id: event.candidate.sdpMid,
-              candidate: event.candidate.candidate,
-            },
-          });
-        } else {
-          console.log("End of candidates.");
-        }
-      };
-      socketRef.current.on("ICEcandidate", (data: any) => {
-        let message = data.rtcMessage;
-        // When Bob gets a candidate message from Alice, he calls `addIceCandidate` to add the candidate to the remote peer description.
+    })
 
-        if (peerRef.current) {
-          peerRef?.current
-            .addIceCandidate(new RTCIceCandidate(message.candidate))
-            .then((data) => {
-              console.log("SUCCESS");
-            })
-            .catch((err) => {
-              // console.log("Error", err);
-            });
-        }
-      });
-    });
+
+    // the onicecandid  ate method does exist
+    user.peerConnection!.current.onicecandidate = (event: any) => {
+      console.log(event, 'test sendICEcanditate')
+      if (event.candidate) {
+        sendICEcandidate({
+          callerId: user.otherUserId,
+          rtcMessage: {
+            label: event.candidate.sdpMLineIndex,
+            id: event.candidate.sdpMid,
+            candidate: event.candidate.candidate,
+          },
+        });
+      } else { console.log("End of candidates."); }
+    }
+    // });
+    return () => {
+      socket.current.off('newCall');
+      socket.current.off('callAnswered');
+      socket.current.off('ICEcandidate');
+    };
   }, [])
 
   async function processAccept() {
-    // 4. Bob sets the description, Alice sent him as the remote description using `setRemoteDescription()`
-    peerRef.current.setRemoteDescription(
-      new RTCSessionDescription(remoteRTCMessage.current)
-    );
-    // 5. Bob runs the `createAnswer` method
-    const sessionDescription = await peerRef.current.createAnswer();
-    // 6. Bob sets that as the local description and sends it to Alice
-    await peerRef.current.setLocalDescription(sessionDescription);
+    const offerDescription = new RTCSessionDescription(remoteRTCMessage.current)
+    await user.peerConnection?.current.setRemoteDescription(offerDescription);
+    const sessionDescription = await user.peerConnection?.current.createAnswer();
+    await user.peerConnection?.current.setLocalDescription(sessionDescription);
     answerCall({
-      callerId: otherUserId,
+      callerId: user.otherUserId,
       rtcMessage: sessionDescription,
     });
   }
 
   const sendICEcandidate = (data: CallData) => {
-    socket.emit('ICEcandidate', data);
+    socket.current.emit('ICEcandidate', data);
   }
 
   async function processCall() {
-    // 1. Alice runs the `createOffer` method for getting SDP.
-    const sessionDescription = await peerRef.current.createOffer(sessionConstraints);
-
-    // 2. Alice sets the local description using `setLocalDescription`.
-    await peerRef.current.setLocalDescription(sessionDescription);
-    // console.log(otherUserId)
-    // 3. Send this session description to Bob uisng socket
+    const sessionDescription = await user.peerConnection?.current.createOffer(sessionConstraints);
+    console.log(sessionDescription)
+    await user.peerConnection!.current.setLocalDescription(sessionDescription);
     sendCall({
-      callerId: otherUserId,
+      callerId: user.otherUserId,
       rtcMessage: sessionDescription,
     });
   }
 
   const answerCall = (data: CallData) => {
-    socketRef.current.emit("answerCall", data);
+    socket.current.emit("answerCall", data);
   }
 
   const sendCall = (data: CallData) => {
-    socketRef.current.emit("call", data);
+    console.log(data)
+    socket.current.emit("call", data);
   }
 
-  return [processCall, processAccept, otherUserId, setOtherUserId] as const
+  return { processAccept, processCall }
 }
 
 export default useSocket

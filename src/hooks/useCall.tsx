@@ -1,60 +1,45 @@
-import { MutableRefObject, useEffect, useRef, useState } from "react";
-import { mediaDevices, MediaStream, RTCPeerConnection } from "react-native-webrtc";
+import { RTCSessionDescription } from "react-native-webrtc";
+import { CallData } from "./useSocket";
+import { useUserContext } from "./userContext"
+import { MutableRefObject, useRef, useState } from "react";
 
-export const configuration = {
-  iceServers: [
-    {
-      urls: 'stun:stun.l.google.com:19302',
-    },
-    {
-      urls: 'stun:stun1.l.google.com:19302',
-    },
-    {
-      urls: 'stun:stun2.l.google.com:19302',
-    },
-  ],
-};
-export let mediaConstraints = {
-  audio: true,
-  video: {
-    frameRate: 30,
-    facingMode: 'user'
+const sessionConstraints = {
+  mandatory: {
+    OfferToReceiveAudio: true,
+    OfferToReceiveVideo: true,
+    VoiceActivityDetection: true
   }
 };
 
-type Props = {
-  peerConnection: MutableRefObject<RTCPeerConnection>
-}
 
-const useCall = ({ peerConnection }: Props) => {
-  const [localMediaStream, setLocalMediaStream] = useState<MediaStream | undefined>(new MediaStream(undefined))
-  const [remoteMediaStream, setRemoteMediaStream] = useState<MediaStream | undefined>(new MediaStream(undefined))
-  // const peerConnection = useRef(new RTCPeerConnection(configuration))
-  let isVoiceOnly = false;
+const useCall = () => {
+  const { user } = useUserContext()
+  const remoteRTCMessage = useRef()
 
-  useEffect(() => {
-    peerConnection.current.getReceivers()
-      .forEach(receiver => remoteMediaStream?.addTrack(receiver.track!))
+  async function processAccept(answerCall: (data: CallData) => void) {
+    const offerDescription = new RTCSessionDescription(remoteRTCMessage.current)
+    await user.peerConnection?.current.setRemoteDescription(offerDescription);
+    const sessionDescription = await user.peerConnection?.current.createAnswer();
+    await user.peerConnection?.current.setLocalDescription(sessionDescription);
+    answerCall({
+      callerId: user.otherUserId,
+      rtcMessage: sessionDescription,
+    });
+    // navigation.navigate('WebRTCRoom')
+  }
 
-    mediaDevices.getUserMedia(mediaConstraints)
-      .then(mediaStream => {
-        const tracks = mediaStream.getTracks()
-        tracks.forEach(track => peerConnection.current.addTrack(track))
-        setLocalMediaStream(mediaStream);
-      }).catch(error => { });
-    peerConnection.current.addEventListener('track', (e: any) => {
-      remoteMediaStream?.addTrack(e.track)
-    })
-    // Handle Error
+  async function processCall(sendCall: (data: CallData) => void) {
+    const sessionDescription = await user.peerConnection?.current.createOffer(sessionConstraints);
+    await user.peerConnection!.current.setLocalDescription(sessionDescription);
+    sendCall({
+      callerId: user.otherUserId,
+      rtcMessage: sessionDescription,
+    });
+    // console.log(sessionDescription)
+    // navigation.navigate('WebRTCRoom')
+  }
 
-    // if (isVoiceOnly) {
-    //   let videoTrack = await mediaStream.getVideoTracks()[0];
-    //   videoTrack.enabled = false;
-    // };
-    peerConnection.current.addEventListener('track', (event) => { });
-  }, [])
-
-  return [localMediaStream, remoteMediaStream]
+  return { processAccept, processCall, remoteRTCMessage }
 }
 
 export default useCall

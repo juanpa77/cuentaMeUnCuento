@@ -18,6 +18,9 @@ import {
   Colors,
 } from 'react-native/Libraries/NewAppScreen';
 import Join from './src/screens/Join';
+import Main from './src/screens/Home';
+import MainStack from './src/navigation/MainStack';
+import UserProvider from './src/hooks/userContext';
 
 function App(): JSX.Element {
   const isDarkMode = useColorScheme() === 'dark';
@@ -32,10 +35,11 @@ function App(): JSX.Element {
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
         backgroundColor={backgroundStyle.backgroundColor}
       />
-      <View style={{ height: '100%' }}>
-
-        <Join />
-      </View>
+      <UserProvider>
+        <View style={{ height: '100%' }}>
+          <MainStack />
+        </View>
+      </UserProvider>
     </SafeAreaView>
   );
 }

@@ -1,14 +1,19 @@
-import { MutableRefObject } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import CallAnswer from '../assets/CallAnswer';
+import { useUserContext } from '../hooks/userContext';
+import { RootStackParamList } from '../types/navigation';
+import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 
-type Prop = {
-  idUser: string
-  setType: (type: string) => void
+// type IncomingCallScreen = NativeStackScreenProps<RootStackParamList, 'IncomingCall'>
+type Props = {
+  // route: RouteProp<RootStackParamList>;
+  navigation: NativeStackNavigationProp<RootStackParamList>;
+  closeModal: () => void
   processAccept: () => Promise<void>
 }
+const IncomingCall = ({ navigation, closeModal, processAccept }: Props) => {
+  const { user } = useUserContext()
 
-const IncomingCall = ({ idUser, setType, processAccept }: Prop) => {
   return (
     <View
       style={{
@@ -29,7 +34,7 @@ const IncomingCall = ({ idUser, setType, processAccept }: Prop) => {
             marginTop: 12,
             color: '#ffff',
           }}>
-          {idUser} is calling..
+          {user.otherUserId} is calling..
         </Text>
       </View>
       <View
@@ -40,7 +45,7 @@ const IncomingCall = ({ idUser, setType, processAccept }: Prop) => {
         <TouchableOpacity
           onPress={() => {
             processAccept()
-            setType('WEBRTC_ROOM');
+            navigation.navigate('WebRTCRoom')
           }}
           style={{
             backgroundColor: 'green',

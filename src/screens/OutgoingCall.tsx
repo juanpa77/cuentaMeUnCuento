@@ -1,12 +1,19 @@
-import { MutableRefObject } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import CallEnd from '../assets/CallEnd';
-type Prop = {
-  idUser: string
-  setType: (type: string) => void
+import { useUserContext } from '../hooks/userContext';
+import { NavigateProps, RootStackParamList } from '../types/navigation';
+import { RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+type Props = {
+  // route: RouteProp<RootStackParamList>;
+  navigation: NativeStackNavigationProp<RootStackParamList>;
+  closeModal: () => void
 }
 
-const OutgoingCall = ({ idUser, setType }: Prop) => {
+const OutgoingCall = ({ navigation, closeModal }: Props) => {
+  const { user } = useUserContext()
+  console.log(user)
   return (
     <View
       style={{
@@ -36,7 +43,7 @@ const OutgoingCall = ({ idUser, setType }: Prop) => {
             color: '#ffff',
             letterSpacing: 6,
           }}>
-          {idUser}
+          {user.otherUserId}
         </Text>
       </View>
       <View
@@ -46,7 +53,8 @@ const OutgoingCall = ({ idUser, setType }: Prop) => {
         }}>
         <TouchableOpacity
           onPress={() => {
-            setType('JOIN');
+            closeModal()
+            // navigation.navigation('Join');
             // idUser.current = null;
           }}
           style={{
